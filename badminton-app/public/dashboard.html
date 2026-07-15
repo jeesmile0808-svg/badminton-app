@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ตารางแบดมินตัน - แผงควบคุมแอดมิน</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="topbar">
+    <h1>🏸 ตารางแบดมินตัน — แผงแอดมิน</h1>
+    <div class="row" style="margin:0;">
+      <span id="sheetStatus" class="status-pill status-off">Google Sheets: ตรวจสอบ...</span>
+      <button class="secondary" id="logoutBtn">ออกจากระบบ</button>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <div class="card">
+      <h2>1. วางข้อความ หรือแนบภาพจากไลน์</h2>
+      <textarea id="lineText" placeholder="วางข้อความจากกลุ่มไลน์ตรงนี้ เช่น &quot;วันนี้ผมลงสนาม 1 ครับ&quot;"></textarea>
+      <div class="row">
+        <input type="file" id="lineImage" accept="image/*" />
+        <button id="parseBtn">✨ ให้ AI อ่านและติ๊กให้อัตโนมัติ</button>
+        <span id="parseLoading" style="display:none;">กำลังประมวลผล...</span>
+      </div>
+      <div id="previewBox" class="preview-box" style="display:none;"></div>
+      <div class="row" id="applyRow" style="display:none;">
+        <button id="applyBtn">✅ ใช้ผลลัพธ์นี้ลงตาราง</button>
+        <button class="secondary" id="discardBtn">ยกเลิก</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2. ตารางสรุปรายชื่อ วันที่ <input type="date" id="dateInput" style="border:1px solid #d1d5db;border-radius:6px;padding:4px;"></h2>
+      <table id="attTable">
+        <thead>
+          <tr id="headRow"></tr>
+        </thead>
+        <tbody id="bodyRows"></tbody>
+        <tfoot>
+          <tr class="total-row" id="totalRow"></tr>
+        </tfoot>
+      </table>
+      <div class="row">
+        <button id="addPlayerBtn" class="secondary">+ เพิ่มรายชื่อ</button>
+        <button id="saveBtn">💾 บันทึกตาราง</button>
+        <button id="syncBtn" class="secondary">🔄 Sync ไป Google Sheet</button>
+        <button id="resetBtn" class="danger">ล้างตาราง (ติ๊กใหม่ทั้งหมด)</button>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="/js/dashboard.js"></script>
+</body>
+</html>

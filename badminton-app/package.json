@@ -1,0 +1,21 @@
+{
+  "name": "badminton-attendance",
+  "version": "1.0.0",
+  "description": "Badminton group attendance app - paste LINE messages, AI auto-fills attendance table, syncs to Google Sheets",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "dotenv": "^16.4.5",
+    "multer": "^1.4.5-lts.1",
+    "googleapis": "^140.0.1",
+    "node-fetch": "^2.7.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
