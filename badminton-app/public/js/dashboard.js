@@ -75,18 +75,28 @@ function renderCourtCell(name, p) {
 }
 
 function startCourt(name) {
-  if (state.players[name].onCourt) return;
+  const p = state.players[name];
+  if (p.onCourt) return;
   if (countOnCourt() >= MAX_ON_COURT) {
     toast(`ลงเล่นเต็มแล้ว (สูงสุด ${MAX_ON_COURT} คน) กด "ยกเลิก" คนอื่นก่อน`);
     return;
   }
-  state.players[name].onCourt = true;
+  p.onCourt = true;
+  p.online = true;
+  p.games = (p.games || 0) + 1;
   render();
+  toast(`${name} ลงเล่น ✅ นับเพิ่ม 1 เกมส์ และคำนวณค่าใช้จ่ายใหม่แล้ว`);
 }
 
 function cancelCourt(name) {
-  state.players[name].onCourt = false;
+  const p = state.players[name];
+  if (p.onCourt) {
+    // ยกเลิกการกด NOW ล่าสุด: ลบเกมส์ที่เพิ่งนับไปคืน
+    p.games = Math.max(0, (p.games || 0) - 1);
+  }
+  p.onCourt = false;
   render();
+  toast(`${name} ยกเลิกแล้ว คำนวณค่าใช้จ่ายใหม่แล้ว`);
 }
 
 function render() {
