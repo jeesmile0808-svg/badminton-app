@@ -23,7 +23,7 @@ function defaultState() {
   const roster = loadRoster();
   const players = {};
   roster.players.forEach((name) => {
-    players[name] = { online: false, games: 0 };
+    players[name] = { online: false, games: 0, onCourt: false };
   });
   return {
     date: new Date().toISOString().slice(0, 10),
@@ -40,7 +40,7 @@ function migrateState(state, roster) {
   roster.players.forEach((name) => {
     const old = state && state.attendance && state.attendance[name];
     const wasOnline = old && Object.values(old).some(Boolean);
-    players[name] = { online: !!wasOnline, games: 0 };
+    players[name] = { online: !!wasOnline, games: 0, onCourt: false };
   });
   return {
     date: (state && state.date) || new Date().toISOString().slice(0, 10),
@@ -62,7 +62,7 @@ function loadState() {
   if (!migrated.config) migrated.config = roster.config;
   // เติมผู้เล่นใหม่ที่มีใน roster แต่ยังไม่มีใน state (เช่น เพิ่งเพิ่มชื่อ)
   roster.players.forEach((name) => {
-    if (!migrated.players[name]) migrated.players[name] = { online: false, games: 0 };
+    if (!migrated.players[name]) migrated.players[name] = { online: false, games: 0, onCourt: false };
   });
   return migrated;
 }

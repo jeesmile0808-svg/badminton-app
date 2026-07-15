@@ -1,6 +1,7 @@
 let roster = null;
 let state = null;
 let lastParseResult = null;
+const MAX_ON_COURT = 4;
 
 function toast(msg) {
   const el = document.getElementById('toast');
@@ -60,6 +61,46 @@ async function loadAll() {
   }
 }
 
+
+function countOnCourt() {
+  return Object.values(state.players).filter(p => p.onCourt).length;
+}
+
+function renderCourtCell(name, p) {
+  if (p.onCourt) {
+    return `
+      <div class="court-now-wrap">
+        <span class="now-badge">NOW</span>
+        <button class="court-btn finish" data-finish="${escapeHtml(name)}">จบเกมส์</button>
+        <button class="court-btn cancel" data-cancel="${escapeHtml(name)}">ยกเลิก</button>
+      </div>`;
+  }
+  return `<button class="court-btn idle" data-start="${escapeHtml(name)}">ไม่ได้ลงเล่น</button>`;
+}
+
+function startCourt(name) {
+  if (countOnCourt() >= MAX_ON_COURT) {
+    toast(`ลงคอร์ทเต็มแล้ว (สูงสุด ${MAX_ON_COURT} คน) กด "จบเกมส์" คนอื่นก่อน`);
+    return;
+  }
+  state.players[name].onCourt = true;
+  render();
+}
+
+function finishCourt(name) {
+  const p = state.players[name];
+  p.onCourt = false;
+  p.online = true;
+  p.games = (p.games || 0) + 1;
+  render();
+  toast(`${name} จบเกมส์ ✅ นับเพิ่ม 1 เกมส์ และคำนวณค่าใช้จ่ายใหม่แล้ว`);
+}
+
+function cancelCourt(name) {
+  state.players[name].onCourt = false;
+  render();
+}
+
 function render() {
   const totals = computeTotals(state.config, state.players);
 
@@ -74,6 +115,7 @@ function render() {
       <td>${idx + 1}</td>
       <td class="name-cell"><input class="name-input" data-idx="${idx}" value="${escapeHtml(name)}"></td>
       <td><button class="online-toggle ${p.online ? 'on' : 'off'}" data-name="${escapeHtml(name)}">${p.online ? 'มา' : 'ไม่มา'}</button></td>
+      <td class="court-cell">${renderCourtCell(name, p)}</td>
       <td><input type="number" min="0" class="games-input" data-name="${escapeHtml(name)}" value="${p.games || 0}" ${p.online ? '' : 'disabled'}></td>
       <td class="readonly-cell">${calc.courtFee}</td>
       <td class="readonly-cell">${calc.shuttleFee}</td>
@@ -118,6 +160,19 @@ function render() {
       render();
     });
   });
+
+  bodyRows.querySelectorAll('[data-start]').forEach(btn => {
+    btn.addEventListener('click', () => startCourt(btn.dataset.start));
+  });
+  bodyRows.querySelectorAll('[data-finish]').forEach(btn => {
+    btn.addEventListener('click', () => finishCourt(btn.dataset.finish));
+  });
+  bodyRows.querySelectorAll('[data-cancel]').forEach(btn => {
+    btn.addEventListener('click', () => cancelCourt(btn.dataset.cancel));
+  });
+
+  const countPill = document.getElementById('courtCountPill');
+  if (countPill) countPill.textContent = `กำลังลงคอร์ทตอนนี้: ${countOnCourt()} / ${MAX_ON_COURT}`;
 
   renderSummary(totals);
 }
