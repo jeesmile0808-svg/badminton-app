@@ -19,7 +19,7 @@
 
     <div class="card">
       <h2>1. วางข้อความ หรือแนบภาพจากไลน์</h2>
-      <textarea id="lineText" placeholder="วางข้อความจากกลุ่มไลน์ตรงนี้ เช่น &quot;วันนี้ผมลงสนาม 1 ครับ&quot;"></textarea>
+      <textarea id="lineText" placeholder="วางข้อความจากกลุ่มไลน์ตรงนี้ เช่น &quot;เยียนมาครับ เล่น 4 เกมส์&quot;"></textarea>
       <div class="row">
         <input type="file" id="lineImage" accept="image/*" />
         <button id="parseBtn">✨ ให้ AI อ่านและติ๊กให้อัตโนมัติ</button>
@@ -33,22 +33,44 @@
     </div>
 
     <div class="card">
-      <h2>2. ตารางสรุปรายชื่อ วันที่ <input type="date" id="dateInput" style="border:1px solid #d1d5db;border-radius:6px;padding:4px;"></h2>
+      <h2>2. ตั้งค่าราคา วันที่ <input type="date" id="dateInput" style="border:1px solid #d1d5db;border-radius:6px;padding:4px;"></h2>
+      <div class="config-grid">
+        <label>ราคา / ลูก (บาท)<input type="number" id="cfgShuttlePrice" step="1"></label>
+        <label>ลูกแบดที่ใช้ (ลูก)<input type="number" id="cfgShuttleCount" step="1"></label>
+        <label>ค่าสนาม / ชม. (บาท)<input type="number" id="cfgCourtRate" step="1"></label>
+        <label>จำนวนชั่วโมง<input type="number" id="cfgHours" step="0.5"></label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>3. ตารางรายชื่อ / ออนไลน์ / เกมส์ / ค่าใช้จ่าย</h2>
       <table id="attTable">
         <thead>
-          <tr id="headRow"></tr>
+          <tr>
+            <th>#</th>
+            <th style="text-align:left;">ชื่อ</th>
+            <th>ออนไลน์</th>
+            <th>จำนวนเกมส์</th>
+            <th>ค่าสนาม</th>
+            <th>ค่าลูก</th>
+            <th>รวม/คน</th>
+            <th></th>
+          </tr>
         </thead>
         <tbody id="bodyRows"></tbody>
-        <tfoot>
-          <tr class="total-row" id="totalRow"></tr>
-        </tfoot>
       </table>
       <div class="row">
         <button id="addPlayerBtn" class="secondary">+ เพิ่มรายชื่อ</button>
         <button id="saveBtn">💾 บันทึกตาราง</button>
         <button id="syncBtn" class="secondary">🔄 Sync ไป Google Sheet</button>
-        <button id="resetBtn" class="danger">ล้างตาราง (ติ๊กใหม่ทั้งหมด)</button>
+        <button id="resetBtn" class="danger">ล้างตาราง (รีเซ็ตทั้งหมด)</button>
       </div>
+    </div>
+
+    <div class="card">
+      <h2>4. สรุปยอด</h2>
+      <div class="summary-grid" id="summaryGrid"></div>
+      <div class="grand-total" id="grandTotalBox"></div>
     </div>
 
   </div>

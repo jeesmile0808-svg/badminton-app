@@ -9,12 +9,43 @@ function toast(msg) {
   setTimeout(() => el.classList.remove('show'), 2500);
 }
 
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// สูตรเดียวกับ lib/calc.js ฝั่งเซิร์ฟเวอร์ (ต้องแก้พร้อมกันทั้งสองที่ถ้าจะเปลี่ยนสูตร)
+function computeTotals(config, players) {
+  const totalCourtFee = Math.round((config.courtHourlyRate || 0) * (config.hours || 0));
+  const totalShuttleFee = Math.round((config.shuttleUnitPrice || 0) * (config.shuttlesUsed || 0));
+  const grandTotal = totalCourtFee + totalShuttleFee;
+
+  const names = Object.keys(players);
+  const totalGames = names.reduce((sum, n) => sum + (players[n].online ? (players[n].games || 0) : 0), 0);
+  const playerCount = names.filter(n => players[n].online).length;
+  const totalMatches = totalGames > 0 ? +(totalGames / 4).toFixed(2) : 0;
+
+  const perPlayer = {};
+  names.forEach(name => {
+    const p = players[name];
+    const games = p.online ? (p.games || 0) : 0;
+    const courtFee = totalGames > 0 ? Math.round((totalCourtFee / totalGames) * games) : 0;
+    const shuttleFee = totalGames > 0 ? Math.round((totalShuttleFee / totalGames) * games) : 0;
+    perPlayer[name] = { games, courtFee, shuttleFee, total: courtFee + shuttleFee };
+  });
+
+  return { totalCourtFee, totalShuttleFee, grandTotal, totalGames, totalMatches, playerCount, perPlayer };
+}
+
 async function loadAll() {
   const res = await fetch('/api/state');
   const data = await res.json();
   roster = data.roster;
   state = data.state;
   document.getElementById('dateInput').value = state.date;
+  document.getElementById('cfgShuttlePrice').value = state.config.shuttleUnitPrice;
+  document.getElementById('cfgShuttleCount').value = state.config.shuttlesUsed;
+  document.getElementById('cfgCourtRate').value = state.config.courtHourlyRate;
+  document.getElementById('cfgHours').value = state.config.hours;
   render();
 
   const sres = await fetch('/api/sheet-status');
@@ -30,41 +61,40 @@ async function loadAll() {
 }
 
 function render() {
-  const headRow = document.getElementById('headRow');
-  headRow.innerHTML = '<th>#</th><th style="text-align:left;">ชื่อ</th>' +
-    roster.sessions.map(s => `<th class="session-header">${s.label}<small>${s.time}</small></th>`).join('') +
-    '<th></th>';
+  const totals = computeTotals(state.config, state.players);
 
   const bodyRows = document.getElementById('bodyRows');
   bodyRows.innerHTML = '';
   roster.players.forEach((name, idx) => {
-    if (!state.attendance[name]) state.attendance[name] = {};
+    if (!state.players[name]) state.players[name] = { online: false, games: 0 };
+    const p = state.players[name];
+    const calc = totals.perPlayer[name];
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${idx + 1}</td>
       <td class="name-cell"><input class="name-input" data-idx="${idx}" value="${escapeHtml(name)}"></td>
-      ${roster.sessions.map(s => `
-        <td><input type="checkbox" data-name="${escapeHtml(name)}" data-session="${s.id}" ${state.attendance[name][s.id] ? 'checked' : ''}></td>
-      `).join('')}
+      <td><button class="online-toggle ${p.online ? 'on' : 'off'}" data-name="${escapeHtml(name)}">${p.online ? 'มา' : 'ไม่มา'}</button></td>
+      <td><input type="number" min="0" class="games-input" data-name="${escapeHtml(name)}" value="${p.games || 0}" ${p.online ? '' : 'disabled'}></td>
+      <td class="readonly-cell">${calc.courtFee}</td>
+      <td class="readonly-cell">${calc.shuttleFee}</td>
+      <td class="readonly-cell">${calc.total}</td>
       <td><button class="danger" style="width:auto;padding:4px 10px;" data-remove="${idx}">ลบ</button></td>
     `;
     bodyRows.appendChild(tr);
   });
 
-  // total row
-  const totalRow = document.getElementById('totalRow');
-  const totals = roster.sessions.map(s =>
-    roster.players.filter(n => state.attendance[n] && state.attendance[n][s.id]).length
-  );
-  totalRow.innerHTML = `<td></td><td style="text-align:left;">รวม</td>` +
-    totals.map(t => `<td>${t}</td>`).join('') + `<td></td>`;
-
-  // bind events
-  bodyRows.querySelectorAll('input[type=checkbox]').forEach(cb => {
-    cb.addEventListener('change', () => {
-      const name = cb.dataset.name;
-      const sid = cb.dataset.session;
-      state.attendance[name][sid] = cb.checked;
+  bodyRows.querySelectorAll('.online-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const name = btn.dataset.name;
+      state.players[name].online = !state.players[name].online;
+      if (!state.players[name].online) state.players[name].games = 0;
+      render();
+    });
+  });
+  bodyRows.querySelectorAll('.games-input').forEach(inp => {
+    inp.addEventListener('change', () => {
+      const name = inp.dataset.name;
+      state.players[name].games = Math.max(0, parseInt(inp.value, 10) || 0);
       render();
     });
   });
@@ -74,8 +104,8 @@ function render() {
       const oldName = roster.players[idx];
       const newName = inp.value.trim() || oldName;
       roster.players[idx] = newName;
-      state.attendance[newName] = state.attendance[oldName] || {};
-      if (newName !== oldName) delete state.attendance[oldName];
+      state.players[newName] = state.players[oldName] || { online: false, games: 0 };
+      if (newName !== oldName) delete state.players[oldName];
       render();
     });
   });
@@ -84,21 +114,32 @@ function render() {
       const idx = Number(btn.dataset.remove);
       const name = roster.players[idx];
       roster.players.splice(idx, 1);
-      delete state.attendance[name];
+      delete state.players[name];
       render();
     });
   });
+
+  renderSummary(totals);
 }
 
-function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function renderSummary(totals) {
+  const grid = document.getElementById('summaryGrid');
+  grid.innerHTML = `
+    <div class="summary-item"><div class="label">ราคาลูกทั้งหมด</div><div class="value">${totals.totalShuttleFee.toLocaleString()}</div></div>
+    <div class="summary-item"><div class="label">ค่าสนามรวม</div><div class="value">${totals.totalCourtFee.toLocaleString()}</div></div>
+    <div class="summary-item"><div class="label">จำนวนผู้เล่น</div><div class="value">${totals.playerCount}</div></div>
+    <div class="summary-item"><div class="label">จำนวนเกมส์ (รวม)</div><div class="value">${totals.totalGames}</div></div>
+    <div class="summary-item"><div class="label">เกมส์ทั้งหมด (แมตช์)</div><div class="value">${totals.totalMatches}</div></div>
+  `;
+  const gt = document.getElementById('grandTotalBox');
+  gt.innerHTML = `ยอดสรุปรวมที่ต้องเก็บ<span class="amount">${totals.grandTotal.toLocaleString()} บาท</span>`;
 }
 
 document.getElementById('addPlayerBtn').addEventListener('click', () => {
   const name = prompt('ชื่อสมาชิกใหม่:');
   if (!name) return;
   roster.players.push(name.trim());
-  state.attendance[name.trim()] = {};
+  state.players[name.trim()] = { online: false, games: 0 };
   render();
 });
 
@@ -106,7 +147,21 @@ document.getElementById('dateInput').addEventListener('change', (e) => {
   state.date = e.target.value;
 });
 
+['cfgShuttlePrice', 'cfgShuttleCount', 'cfgCourtRate', 'cfgHours'].forEach(id => {
+  document.getElementById(id).addEventListener('input', (e) => {
+    const map = {
+      cfgShuttlePrice: 'shuttleUnitPrice',
+      cfgShuttleCount: 'shuttlesUsed',
+      cfgCourtRate: 'courtHourlyRate',
+      cfgHours: 'hours',
+    };
+    state.config[map[id]] = parseFloat(e.target.value) || 0;
+    render();
+  });
+});
+
 document.getElementById('saveBtn').addEventListener('click', async () => {
+  roster.config = state.config;
   await fetch('/api/roster', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(roster) });
   const res = await fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state }) });
   const data = await res.json();
@@ -115,12 +170,12 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
 });
 
 document.getElementById('resetBtn').addEventListener('click', async () => {
-  if (!confirm('ล้างการติ๊กทั้งหมด?')) return;
+  if (!confirm('รีเซ็ตตารางทั้งหมด (ล้างออนไลน์/เกมส์ทุกคน)?')) return;
   const res = await fetch('/api/state/reset', { method: 'POST' });
   const data = await res.json();
   state = data.state;
   render();
-  toast('ล้างตารางแล้ว');
+  toast('รีเซ็ตตารางแล้ว');
 });
 
 document.getElementById('syncBtn').addEventListener('click', async () => {
@@ -170,7 +225,7 @@ function showPreview(data) {
   let html = '<b>AI พบว่า:</b><br>';
   if (matches.length === 0) html += '<i>ไม่พบรายชื่อที่จับคู่ได้</i><br>';
   matches.forEach(m => {
-    html += `${escapeHtml(m.name)} → สนาม ${m.sessions.join(', ')}<br>`;
+    html += `${escapeHtml(m.name)} → มา, เล่น ${m.games} เกมส์<br>`;
   });
   if (unmatched.length) {
     html += '<br><b>จับคู่ไม่ได้ (ตรวจสอบเอง):</b><br>' + unmatched.map(u => escapeHtml(u)).join('<br>');
@@ -183,14 +238,12 @@ function showPreview(data) {
 document.getElementById('applyBtn').addEventListener('click', () => {
   if (!lastParseResult) return;
   (lastParseResult.matches || []).forEach(m => {
-    if (!state.attendance[m.name]) {
-      // ชื่อใหม่ที่ไม่อยู่ใน roster เดิม ให้เพิ่มเข้าไป
+    if (!state.players[m.name]) {
       roster.players.push(m.name);
-      state.attendance[m.name] = {};
+      state.players[m.name] = { online: false, games: 0 };
     }
-    m.sessions.forEach(sid => {
-      state.attendance[m.name][sid] = true;
-    });
+    state.players[m.name].online = true;
+    state.players[m.name].games = m.games || 1;
   });
   render();
   document.getElementById('applyRow').style.display = 'none';
