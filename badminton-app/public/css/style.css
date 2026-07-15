@@ -201,33 +201,24 @@ input.games-input:disabled { background: #f3f4f6; color: #9ca3af; }
 }
 .grand-total .amount { font-size: 30px; font-weight: 800; display: block; margin-top: 4px; }
 
-.court-cell { min-width: 130px; }
+.court-cell { min-width: 110px; }
 .court-btn {
   border: none;
   border-radius: 8px;
-  padding: 6px 12px;
-  font-size: 12px;
+  padding: 6px 10px;
+  font-size: 11px;
   font-weight: 700;
   cursor: pointer;
   width: auto;
   color: white;
 }
-.court-btn.idle { background: #dc2626; }
-.court-btn.idle:hover { background: #b91c1c; }
 .court-now-wrap { display: flex; align-items: center; gap: 6px; justify-content: center; flex-wrap: wrap; }
-.now-badge {
-  background: #16a34a;
-  color: white;
-  font-weight: 800;
-  font-size: 12px;
-  padding: 5px 10px;
-  border-radius: 999px;
-  letter-spacing: 0.5px;
-}
-.court-btn.finish { background: #16a34a; padding: 5px 10px; font-size: 11px; }
-.court-btn.finish:hover { background: #15803d; }
-.court-btn.cancel { background: #6b7280; padding: 5px 10px; font-size: 11px; }
-.court-btn.cancel:hover { background: #4b5563; }
+.court-btn.now { background: #d1d5db; color: #374151; letter-spacing: 0.5px; }
+.court-btn.now:hover { background: #9ca3af; }
+.court-btn.now.active { background: #16a34a; color: white; }
+.court-btn.now.active:hover { background: #15803d; }
+.court-btn.cancel { background: #dc2626; }
+.court-btn.cancel:hover { background: #b91c1c; }
 .court-count-pill {
   display: inline-block;
   background: #f0fdf4;
