@@ -16,8 +16,8 @@ function computeTotals(config, players) {
   names.forEach((name) => {
     const p = players[name];
     const games = p.online ? (p.games || 0) : 0;
-    const courtFee = totalGames > 0 ? Math.round((totalCourtFee / totalGames) * games) : 0;
-    const shuttleFee = totalGames > 0 ? Math.round((totalShuttleFee / totalGames) * games) : 0;
+    const courtFee = totalGames > 0 ? Math.ceil((totalCourtFee / totalGames) * games) : 0;
+    const shuttleFee = totalGames > 0 ? Math.ceil((totalShuttleFee / totalGames) * games) : 0;
     perPlayer[name] = { games, courtFee, shuttleFee, total: courtFee + shuttleFee };
   });
 

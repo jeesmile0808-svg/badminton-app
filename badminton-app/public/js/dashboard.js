@@ -1,7 +1,7 @@
 let roster = null;
 let state = null;
 let lastParseResult = null;
-const MAX_ON_COURT = 4;
+let beforeApplySnapshot = null;
 
 function toast(msg) {
   const el = document.getElementById('toast');
@@ -29,8 +29,8 @@ function computeTotals(config, players) {
   names.forEach(name => {
     const p = players[name];
     const games = p.online ? (p.games || 0) : 0;
-    const courtFee = totalGames > 0 ? Math.round((totalCourtFee / totalGames) * games) : 0;
-    const shuttleFee = totalGames > 0 ? Math.round((totalShuttleFee / totalGames) * games) : 0;
+    const courtFee = totalGames > 0 ? Math.ceil((totalCourtFee / totalGames) * games) : 0;
+    const shuttleFee = totalGames > 0 ? Math.ceil((totalShuttleFee / totalGames) * games) : 0;
     perPlayer[name] = { games, courtFee, shuttleFee, total: courtFee + shuttleFee };
   });
 
@@ -62,43 +62,6 @@ async function loadAll() {
 }
 
 
-function countOnCourt() {
-  return Object.values(state.players).filter(p => p.onCourt).length;
-}
-
-function renderCourtCell(name, p) {
-  return `
-    <div class="court-now-wrap">
-      <button class="court-btn now ${p.onCourt ? 'active' : ''}" data-start="${escapeHtml(name)}">NOW</button>
-      <button class="court-btn cancel" data-cancel="${escapeHtml(name)}">ยกเลิก</button>
-    </div>`;
-}
-
-function startCourt(name) {
-  const p = state.players[name];
-  if (p.onCourt) return;
-  if (countOnCourt() >= MAX_ON_COURT) {
-    toast(`ลงเล่นเต็มแล้ว (สูงสุด ${MAX_ON_COURT} คน) กด "ยกเลิก" คนอื่นก่อน`);
-    return;
-  }
-  p.onCourt = true;
-  p.online = true;
-  p.games = (p.games || 0) + 1;
-  render();
-  toast(`${name} ลงเล่น ✅ นับเพิ่ม 1 เกมส์ และคำนวณค่าใช้จ่ายใหม่แล้ว`);
-}
-
-function cancelCourt(name) {
-  const p = state.players[name];
-  if (p.onCourt) {
-    // ยกเลิกการกด NOW ล่าสุด: ลบเกมส์ที่เพิ่งนับไปคืน
-    p.games = Math.max(0, (p.games || 0) - 1);
-  }
-  p.onCourt = false;
-  render();
-  toast(`${name} ยกเลิกแล้ว คำนวณค่าใช้จ่ายใหม่แล้ว`);
-}
-
 function render() {
   const totals = computeTotals(state.config, state.players);
 
@@ -110,7 +73,6 @@ function render() {
     const calc = totals.perPlayer[name];
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="court-cell">${renderCourtCell(name, p)}</td>
       <td>${idx + 1}</td>
       <td class="name-cell"><input class="name-input" data-idx="${idx}" value="${escapeHtml(name)}"></td>
       <td><button class="online-toggle ${p.online ? 'on' : 'off'}" data-name="${escapeHtml(name)}">${p.online ? 'มา' : 'ไม่มา'}</button></td>
@@ -158,16 +120,6 @@ function render() {
       render();
     });
   });
-
-  bodyRows.querySelectorAll('[data-start]').forEach(btn => {
-    btn.addEventListener('click', () => startCourt(btn.dataset.start));
-  });
-  bodyRows.querySelectorAll('[data-cancel]').forEach(btn => {
-    btn.addEventListener('click', () => cancelCourt(btn.dataset.cancel));
-  });
-
-  const countPill = document.getElementById('courtCountPill');
-  if (countPill) countPill.textContent = `กำลังลงคอร์ทตอนนี้: ${countOnCourt()} / ${MAX_ON_COURT}`;
 
   renderSummary(totals);
 }
@@ -242,71 +194,84 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   window.location.href = '/login.html';
 });
 
-document.getElementById('parseBtn').addEventListener('click', async () => {
-  const text = document.getElementById('lineText').value;
-  const imageFile = document.getElementById('lineImage').files[0];
-  if (!text.trim() && !imageFile) {
-    toast('กรุณาวางข้อความ หรือแนบภาพก่อน');
+async function runParse() {
+  const textEl = document.getElementById('lineText');
+  const text = textEl.value;
+  if (!text.trim()) {
+    toast('กรุณาพิมพ์หรือวางข้อความก่อน');
     return;
   }
   const loading = document.getElementById('parseLoading');
   loading.style.display = 'inline';
-  const fd = new FormData();
-  fd.append('text', text);
-  if (imageFile) fd.append('image', imageFile);
 
   try {
-    const res = await fetch('/api/parse', { method: 'POST', body: fd });
+    const res = await fetch('/api/parse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
     const data = await res.json();
     loading.style.display = 'none';
     if (data.error) { toast('เกิดข้อผิดพลาด: ' + data.error); return; }
-    lastParseResult = data;
-    showPreview(data);
+    applyParseResult(data);
+    textEl.value = '';
   } catch (err) {
     loading.style.display = 'none';
     toast('เกิดข้อผิดพลาด: ' + err.message);
   }
-});
+}
 
-function showPreview(data) {
-  const box = document.getElementById('previewBox');
+function applyParseResult(data) {
+  // เก็บสถานะก่อนหน้าไว้ ให้กด "ย้อนกลับ" ได้ 1 ครั้งล่าสุด
+  beforeApplySnapshot = JSON.parse(JSON.stringify(state.players));
+
   const matches = data.matches || [];
   const unmatched = data.unmatched || [];
-  let html = '<b>AI พบว่า:</b><br>';
+
+  matches.forEach(m => {
+    if (!state.players[m.name]) {
+      roster.players.push(m.name);
+      state.players[m.name] = { online: false, games: 0 };
+    }
+    state.players[m.name].online = true;
+    state.players[m.name].games = (state.players[m.name].games || 0) + (m.games || 1);
+  });
+  render();
+
+  const box = document.getElementById('previewBox');
+  let html = '<b>คำนวณแล้ว:</b><br>';
   if (matches.length === 0) html += '<i>ไม่พบรายชื่อที่จับคู่ได้</i><br>';
   matches.forEach(m => {
-    html += `${escapeHtml(m.name)} → มา, เล่น ${m.games} เกมส์<br>`;
+    html += `${escapeHtml(m.name)} → มา, เพิ่ม ${m.games || 1} เกมส์<br>`;
   });
   if (unmatched.length) {
     html += '<br><b>จับคู่ไม่ได้ (ตรวจสอบเอง):</b><br>' + unmatched.map(u => escapeHtml(u)).join('<br>');
   }
   box.innerHTML = html;
   box.style.display = 'block';
-  document.getElementById('applyRow').style.display = 'flex';
+
+  toast('คำนวณและบันทึกลงตารางแล้ว ✅ กดย้อนกลับได้ถ้าพิมพ์ผิด');
 }
 
-document.getElementById('applyBtn').addEventListener('click', () => {
-  if (!lastParseResult) return;
-  (lastParseResult.matches || []).forEach(m => {
-    if (!state.players[m.name]) {
-      roster.players.push(m.name);
-      state.players[m.name] = { online: false, games: 0 };
-    }
-    state.players[m.name].online = true;
-    state.players[m.name].games = m.games || 1;
-  });
-  render();
-  document.getElementById('applyRow').style.display = 'none';
-  document.getElementById('previewBox').style.display = 'none';
-  document.getElementById('lineText').value = '';
-  document.getElementById('lineImage').value = '';
-  toast('ติ๊กให้อัตโนมัติแล้ว อย่าลืมกด "บันทึกตาราง" ✅');
+document.getElementById('parseBtn').addEventListener('click', runParse);
+
+document.getElementById('lineText').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    runParse();
+  }
 });
 
-document.getElementById('discardBtn').addEventListener('click', () => {
-  lastParseResult = null;
-  document.getElementById('applyRow').style.display = 'none';
+document.getElementById('undoBtn').addEventListener('click', () => {
+  if (!beforeApplySnapshot) {
+    toast('ไม่มีอะไรให้ย้อนกลับ');
+    return;
+  }
+  state.players = beforeApplySnapshot;
+  beforeApplySnapshot = null;
+  render();
   document.getElementById('previewBox').style.display = 'none';
+  toast('ย้อนกลับแล้ว');
 });
 
 loadAll();

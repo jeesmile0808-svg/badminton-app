@@ -18,18 +18,14 @@
   <div class="container">
 
     <div class="card">
-      <h2>1. วางข้อความ หรือแนบภาพจากไลน์</h2>
-      <textarea id="lineText" placeholder="วางข้อความจากกลุ่มไลน์ตรงนี้ เช่น &quot;เยียนมาครับ เล่น 4 เกมส์&quot;"></textarea>
+      <h2>1. วางข้อความจากไลน์ แล้วกด Enter</h2>
+      <textarea id="lineText" placeholder="พิมพ์หรือวางข้อความจากกลุ่มไลน์ตรงนี้ เช่น &quot;เยียนมาครับ เล่น 4 เกมส์&quot; แล้วกด Enter เพื่อคำนวณทันที"></textarea>
       <div class="row">
-        <input type="file" id="lineImage" accept="image/*" />
-        <button id="parseBtn">✨ ให้ AI อ่านและติ๊กให้อัตโนมัติ</button>
+        <button id="parseBtn">✨ คำนวณ (Enter)</button>
+        <button class="secondary" id="undoBtn">↩️ ย้อนกลับ</button>
         <span id="parseLoading" style="display:none;">กำลังประมวลผล...</span>
       </div>
       <div id="previewBox" class="preview-box" style="display:none;"></div>
-      <div class="row" id="applyRow" style="display:none;">
-        <button id="applyBtn">✅ ใช้ผลลัพธ์นี้ลงตาราง</button>
-        <button class="secondary" id="discardBtn">ยกเลิก</button>
-      </div>
     </div>
 
     <div class="card">
@@ -44,11 +40,9 @@
 
     <div class="card">
       <h2>3. ตารางรายชื่อ / ออนไลน์ / เกมส์ / ค่าใช้จ่าย</h2>
-      <div class="court-count-pill" id="courtCountPill">กำลังลงคอร์ทตอนนี้: 0 / 4</div>
       <table id="attTable">
         <thead>
           <tr>
-            <th>ลงเล่น</th>
             <th>#</th>
             <th style="text-align:left;">ชื่อ</th>
             <th>ออนไลน์</th>
