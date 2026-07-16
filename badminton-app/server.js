@@ -7,7 +7,6 @@ const path = require('path');
 const { requireAuth } = require('./lib/auth');
 const { loadRoster, saveRoster, loadState, saveState, defaultState } = require('./lib/store');
 const { parseAttendance } = require('./lib/parser');
-const sheetsLib = require('./lib/sheets');
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
@@ -92,23 +91,6 @@ app.post('/api/parse', upload.single('image'), async (req, res) => {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
-});
-
-// ---- Sync ไป Google Sheets ----
-app.post('/api/sync-sheet', async (req, res) => {
-  try {
-    const roster = loadRoster();
-    const state = loadState();
-    const result = await sheetsLib.syncState(state, roster);
-    res.json(result);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get('/api/sheet-status', (req, res) => {
-  res.json({ configured: sheetsLib.isConfigured() });
 });
 
 const PORT = process.env.PORT || 3000;

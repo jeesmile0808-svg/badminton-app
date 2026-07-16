@@ -48,17 +48,6 @@ async function loadAll() {
   document.getElementById('cfgCourtRate').value = state.config.courtHourlyRate;
   document.getElementById('cfgHours').value = state.config.hours;
   render();
-
-  const sres = await fetch('/api/sheet-status');
-  const sdata = await sres.json();
-  const pill = document.getElementById('sheetStatus');
-  if (sdata.configured) {
-    pill.textContent = 'Google Sheets: เชื่อมต่อแล้ว';
-    pill.className = 'status-pill status-ok';
-  } else {
-    pill.textContent = 'Google Sheets: ยังไม่ได้ตั้งค่า';
-    pill.className = 'status-pill status-off';
-  }
 }
 
 
@@ -165,28 +154,24 @@ document.getElementById('dateInput').addEventListener('change', (e) => {
 document.getElementById('saveBtn').addEventListener('click', async () => {
   roster.config = state.config;
   await fetch('/api/roster', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(roster) });
-  const res = await fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state }) });
-  const data = await res.json();
-  state = data.state;
-  toast('บันทึกแล้ว ✅');
-});
+  await fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state }) });
 
-document.getElementById('resetBtn').addEventListener('click', async () => {
-  if (!confirm('รีเซ็ตตารางทั้งหมด (ล้างออนไลน์/เกมส์ทุกคน)?')) return;
+  // บันทึกยอดล่าสุดเรียบร้อยแล้ว เคลียร์ตาราง (ออนไลน์/เกมส์) ให้พร้อมกรอกรอบใหม่ทันที
+  // ราคาที่ตั้งไว้ (ราคาลูก/ค่าสนาม/ชม.) จะยังคงอยู่เหมือนเดิม
   const res = await fetch('/api/state/reset', { method: 'POST' });
   const data = await res.json();
   state = data.state;
   render();
-  toast('รีเซ็ตตารางแล้ว');
+  toast('บันทึกยอดล่าสุดแล้ว ✅ เคลียร์ตารางพร้อมกรอกรอบใหม่');
 });
 
-document.getElementById('syncBtn').addEventListener('click', async () => {
-  toast('กำลัง sync...');
-  const res = await fetch('/api/sync-sheet', { method: 'POST' });
+document.getElementById('resetBtn').addEventListener('click', async () => {
+  if (!confirm('ล้างตารางทั้งหมด (ออนไลน์/เกมส์ทุกคน) โดยไม่บันทึกก่อน?')) return;
+  const res = await fetch('/api/state/reset', { method: 'POST' });
   const data = await res.json();
-  if (data.error) return toast('เกิดข้อผิดพลาด: ' + data.error);
-  if (data.skipped) return toast('ยังไม่ได้ตั้งค่า Google Sheets (ดู README)');
-  toast('Sync ไป Google Sheet สำเร็จ ✅');
+  state = data.state;
+  render();
+  toast('ล้างตารางแล้ว');
 });
 
 document.getElementById('logoutBtn').addEventListener('click', async () => {
