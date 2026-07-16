@@ -151,27 +151,89 @@ document.getElementById('dateInput').addEventListener('change', (e) => {
   });
 });
 
+function buildReceipt(totals) {
+  const tmpl = document.getElementById('receiptTemplate');
+  const rows = roster.players
+    .filter(name => state.players[name] && state.players[name].online)
+    .map((name, i) => {
+      const c = totals.perPlayer[name];
+      return `
+        <tr>
+          <td>${i + 1}</td>
+          <td class="r-name">${escapeHtml(name)}</td>
+          <td>${c.games}</td>
+          <td>${c.courtFee.toLocaleString()}</td>
+          <td>${c.shuttleFee.toLocaleString()}</td>
+          <td>${c.total.toLocaleString()}</td>
+        </tr>`;
+    }).join('');
+
+  tmpl.innerHTML = `
+    <div class="r-header">
+      <p class="r-title">🏸 สรุปยอดค่าใช้จ่ายแบดมินตัน</p>
+      <p class="r-date">วันที่ ${escapeHtml(state.date)}</p>
+    </div>
+    <table>
+      <thead>
+        <tr><th>#</th><th style="text-align:left;">ชื่อ</th><th>เกมส์</th><th>ค่าสนาม</th><th>ค่าลูก</th><th>รวม</th></tr>
+      </thead>
+      <tbody>${rows || '<tr><td colspan="6">ไม่มีผู้เล่นออนไลน์</td></tr>'}</tbody>
+    </table>
+    <div class="r-summary">
+      <div><span class="r-label">ราคาลูกทั้งหมด</span><span class="r-value">${totals.totalShuttleFee.toLocaleString()}</span></div>
+      <div><span class="r-label">ค่าสนามรวม</span><span class="r-value">${totals.totalCourtFee.toLocaleString()}</span></div>
+      <div><span class="r-label">จำนวนผู้เล่น</span><span class="r-value">${totals.playerCount}</span></div>
+    </div>
+    <div class="r-grand">ยอดรวมที่ต้องเก็บ<span class="r-amount">${totals.grandTotal.toLocaleString()} บาท</span></div>
+    <p class="r-footer">สร้างโดยระบบตารางแบดมินตัน</p>
+  `;
+}
+
+async function downloadReceiptImage() {
+  const el = document.getElementById('receiptTemplate');
+  const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff' });
+  const link = document.createElement('a');
+  link.download = `badminton-${state.date}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
 document.getElementById('saveBtn').addEventListener('click', async () => {
   roster.config = state.config;
   await fetch('/api/roster', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(roster) });
   await fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state }) });
 
-  // บันทึกยอดล่าสุดเรียบร้อยแล้ว เคลียร์ตาราง (ออนไลน์/เกมส์) ให้พร้อมกรอกรอบใหม่ทันที
-  // ราคาที่ตั้งไว้ (ราคาลูก/ค่าสนาม/ชม.) จะยังคงอยู่เหมือนเดิม
-  const res = await fetch('/api/state/reset', { method: 'POST' });
-  const data = await res.json();
-  state = data.state;
+  const totals = computeTotals(state.config, state.players);
+  buildReceipt(totals);
+  document.getElementById('downloadImgBtn').style.display = 'inline-block';
+
+  // บันทึกแล้ว เคลียร์ค่า "ลูกแบดที่ใช้" และ "จำนวนชั่วโมง" ให้เป็น 0 เพื่อให้กรอกใหม่เองทุกรอบ
+  // (ราคา/ลูก และ ค่าสนาม/ชม. ไม่รีเซ็ต เพราะปกติไม่เปลี่ยนบ่อย)
+  state.config.shuttlesUsed = 0;
+  state.config.hours = 0;
+  document.getElementById('cfgShuttleCount').value = 0;
+  document.getElementById('cfgHours').value = 0;
+  roster.config = state.config;
+  await fetch('/api/roster', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(roster) });
   render();
-  toast('บันทึกยอดล่าสุดแล้ว ✅ เคลียร์ตารางพร้อมกรอกรอบใหม่');
+
+  toast('บันทึกแล้ว ✅ กด "ดาวน์โหลดรูปสรุป" เพื่อเก็บไฟล์ไปเรียกเก็บเงินได้เลย');
 });
 
-document.getElementById('resetBtn').addEventListener('click', async () => {
-  if (!confirm('ล้างตารางทั้งหมด (ออนไลน์/เกมส์ทุกคน) โดยไม่บันทึกก่อน?')) return;
+document.getElementById('downloadImgBtn').addEventListener('click', downloadReceiptImage);
+
+document.getElementById('newRoundBtn').addEventListener('click', async () => {
+  if (!confirm('เริ่มรอบใหม่? ระบบจะล้างตาราง (ออนไลน์/เกมส์ทุกคน)')) return;
   const res = await fetch('/api/state/reset', { method: 'POST' });
   const data = await res.json();
   state = data.state;
+  document.getElementById('cfgShuttlePrice').value = state.config.shuttleUnitPrice;
+  document.getElementById('cfgShuttleCount').value = state.config.shuttlesUsed;
+  document.getElementById('cfgCourtRate').value = state.config.courtHourlyRate;
+  document.getElementById('cfgHours').value = state.config.hours;
+  document.getElementById('downloadImgBtn').style.display = 'none';
   render();
-  toast('ล้างตารางแล้ว');
+  toast('เริ่มรอบใหม่แล้ว');
 });
 
 document.getElementById('logoutBtn').addEventListener('click', async () => {

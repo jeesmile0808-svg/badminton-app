@@ -229,3 +229,45 @@ input.games-input:disabled { background: #f3f4f6; color: #9ca3af; }
   font-weight: 700;
   margin-bottom: 8px;
 }
+
+.receipt-a4 {
+  width: 794px;
+  min-height: 1123px;
+  background: #ffffff;
+  padding: 48px;
+  font-family: "Sarabun", "Segoe UI", sans-serif;
+  color: #111827;
+  box-sizing: border-box;
+}
+.receipt-a4 .r-header {
+  text-align: center;
+  margin-bottom: 28px;
+  border-bottom: 3px solid #16a34a;
+  padding-bottom: 16px;
+}
+.receipt-a4 .r-title { font-size: 26px; font-weight: 800; margin: 0 0 6px; }
+.receipt-a4 .r-date { font-size: 16px; color: #6b7280; margin: 0; }
+.receipt-a4 table { width: 100%; border-collapse: collapse; font-size: 15px; margin-bottom: 24px; }
+.receipt-a4 th, .receipt-a4 td { border: 1px solid #d1d5db; padding: 10px 12px; text-align: center; }
+.receipt-a4 th { background: #f0fdf4; font-weight: 700; }
+.receipt-a4 td.r-name { text-align: left; font-weight: 600; }
+.receipt-a4 .r-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 24px;
+  font-size: 14px;
+}
+.receipt-a4 .r-summary div { background: #f9fafb; border-radius: 8px; padding: 10px; text-align: center; }
+.receipt-a4 .r-summary .r-label { color: #6b7280; font-size: 12px; display: block; margin-bottom: 2px; }
+.receipt-a4 .r-summary .r-value { font-size: 17px; font-weight: 700; }
+.receipt-a4 .r-grand {
+  background: #16a34a;
+  color: white;
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  font-size: 18px;
+}
+.receipt-a4 .r-grand .r-amount { font-size: 34px; font-weight: 800; display: block; margin-top: 6px; }
+.receipt-a4 .r-footer { text-align: center; color: #9ca3af; font-size: 12px; margin-top: 32px; }

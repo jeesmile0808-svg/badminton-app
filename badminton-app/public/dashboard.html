@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ตารางแบดมินตัน - แผงควบคุมแอดมิน</title>
 <link rel="stylesheet" href="/css/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
   <div class="topbar">
@@ -56,8 +57,9 @@
       </table>
       <div class="row">
         <button id="addPlayerBtn" class="secondary">+ เพิ่มรายชื่อ</button>
-        <button id="saveBtn">💾 บันทึก & เริ่มรอบใหม่</button>
-        <button id="resetBtn" class="danger">ล้างตาราง (ไม่บันทึก)</button>
+        <button id="saveBtn">💾 บันทึก</button>
+        <button id="downloadImgBtn" class="secondary" style="display:none;">📥 ดาวน์โหลดรูปสรุป (A4)</button>
+        <button id="newRoundBtn" class="danger">🔄 เริ่มรอบใหม่</button>
       </div>
     </div>
 
@@ -67,6 +69,10 @@
       <div class="grand-total" id="grandTotalBox"></div>
     </div>
 
+  </div>
+
+  <div id="receiptWrap" style="position:absolute; left:-99999px; top:0;">
+    <div id="receiptTemplate" class="receipt-a4"></div>
   </div>
 
   <div class="toast" id="toast"></div>
