@@ -3,6 +3,10 @@
 // 2) ถ้าไม่ได้ตั้งค่า -> เก็บในไฟล์ JSON local (data/state.json, data/roster.json) เหมือนเดิม
 //    ข้อควรระวัง: ถ้า deploy บน Render แผนฟรี ไฟล์ local จะหายทุกครั้งที่แอป sleep แล้วตื่นใหม่
 //    (แผนฟรีของ Render ไม่มีดิสก์ถาวร) แนะนำให้ตั้งค่า Upstash เพื่อไม่ให้ข้อมูลหาย
+//
+// หมายเหตุการเรียก Upstash: ใช้รูปแบบ "JSON array command body" ตามเอกสารทางการ
+// (POST ไปที่ endpoint ตรงๆ พร้อม body เป็น ["SET","key","value"] หรือ ["GET","key"])
+// เพราะปลอดภัยกว่าการฝังค่าลงใน URL path เมื่อค่าที่เก็บเป็น JSON ยาวๆ ที่มีอักขระพิเศษ/ภาษาไทย
 const fs = require('fs');
 const path = require('path');
 const fetch = require('node-fetch');
@@ -19,34 +23,46 @@ function upstashConfigured() {
   return !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
 }
 
-async function upstashGet(key) {
-  const url = `${process.env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}` },
-  });
-  if (!res.ok) throw new Error(`Upstash GET error ${res.status}`);
-  const data = await res.json();
-  return data.result ? JSON.parse(data.result) : null;
-}
-
-async function upstashSet(key, value) {
-  const url = `${process.env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`;
-  const res = await fetch(url, {
+async function upstashCommand(commandArray) {
+  const res = await fetch(process.env.UPSTASH_REDIS_REST_URL, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(JSON.stringify(value)),
+    body: JSON.stringify(commandArray),
   });
-  if (!res.ok) throw new Error(`Upstash SET error ${res.status}`);
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Upstash error ${res.status}: ${errText}`);
+  }
+  return res.json();
+}
+
+async function upstashGet(key) {
+  const data = await upstashCommand(['GET', key]);
+  if (!data || data.result === null || data.result === undefined) return null;
+  try {
+    return JSON.parse(data.result);
+  } catch (e) {
+    // ข้อมูลที่เก็บไว้เสีย/อ่านไม่ได้ (เช่นจากบั๊กเวอร์ชันเก่า) ถือว่าไม่มีข้อมูล ให้ผู้เรียกไปสร้างค่าใหม่แทน
+    return null;
+  }
+}
+
+async function upstashSet(key, value) {
+  await upstashCommand(['SET', key, JSON.stringify(value)]);
+}
+
+function isValidRoster(roster) {
+  return !!(roster && Array.isArray(roster.players) && roster.players.length > 0);
 }
 
 async function loadRoster() {
   if (upstashConfigured()) {
     let roster = await upstashGet(ROSTER_KEY);
-    if (!roster) {
-      // ยังไม่เคยบันทึกขึ้น Upstash มาก่อน ใช้ค่าตั้งต้นจากไฟล์ที่แถมมาเป็นฐาน แล้วเซฟขึ้นไปครั้งแรก
+    if (!isValidRoster(roster)) {
+      // ยังไม่เคยบันทึกขึ้น Upstash มาก่อน (หรือข้อมูลเสีย) ใช้ค่าตั้งต้นจากไฟล์ที่แถมมาเป็นฐาน แล้วเซฟขึ้นไปใหม่
       roster = JSON.parse(fs.readFileSync(ROSTER_FILE, 'utf8'));
       if (!roster.config) roster.config = DEFAULT_CONFIG;
       await upstashSet(ROSTER_KEY, roster);
@@ -102,6 +118,10 @@ function migrateState(state, roster) {
   };
 }
 
+function isValidState(state) {
+  return !!(state && state.players && typeof state.players === 'object');
+}
+
 async function loadState() {
   const roster = await loadRoster();
   let raw;
@@ -122,7 +142,13 @@ async function loadState() {
     raw = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
   }
 
-  const migrated = migrateState(raw, roster);
+  let migrated = migrateState(raw, roster);
+  if (!isValidState(migrated)) {
+    // ข้อมูลเสีย/รูปแบบไม่ถูกต้อง กู้กลับเป็นค่าเริ่มต้นแทนการพังทั้งหน้า
+    migrated = freshState(roster);
+    await saveState(migrated);
+    return migrated;
+  }
   if (!migrated.config) migrated.config = roster.config;
   roster.players.forEach((name) => {
     if (!migrated.players[name]) migrated.players[name] = { online: false, games: 0 };
