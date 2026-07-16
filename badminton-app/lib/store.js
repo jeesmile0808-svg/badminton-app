@@ -1,29 +1,76 @@
-// เก็บข้อมูลแบบง่ายในไฟล์ JSON local (data/state.json)
-// หมายเหตุ: ถ้า deploy บน Render แผนฟรี ไฟล์นี้จะรีเซ็ตทุกครั้งที่ deploy ใหม่ (ดิสก์ไม่ถาวร)
-// ถ้าต้องการเก็บถาวร แนะนำให้กด "บันทึก & เริ่มรอบใหม่" ก่อนแคปหน้าจอสรุปยอดเก็บไว้
+// เก็บข้อมูล 2 แบบ:
+// 1) ถ้าตั้งค่า UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN ไว้ -> เก็บถาวรบน Upstash Redis (ฟรี)
+// 2) ถ้าไม่ได้ตั้งค่า -> เก็บในไฟล์ JSON local (data/state.json, data/roster.json) เหมือนเดิม
+//    ข้อควรระวัง: ถ้า deploy บน Render แผนฟรี ไฟล์ local จะหายทุกครั้งที่แอป sleep แล้วตื่นใหม่
+//    (แผนฟรีของ Render ไม่มีดิสก์ถาวร) แนะนำให้ตั้งค่า Upstash เพื่อไม่ให้ข้อมูลหาย
 const fs = require('fs');
 const path = require('path');
+const fetch = require('node-fetch');
 
 const STATE_FILE = path.join(__dirname, '..', 'data', 'state.json');
 const ROSTER_FILE = path.join(__dirname, '..', 'data', 'roster.json');
 
-function loadRoster() {
-  const roster = JSON.parse(fs.readFileSync(ROSTER_FILE, 'utf8'));
-  if (!roster.config) {
-    roster.config = { shuttleUnitPrice: 78, shuttlesUsed: 12, courtHourlyRate: 180, hours: 6.5 };
+const ROSTER_KEY = 'badminton:roster';
+const STATE_KEY = 'badminton:state';
+
+const DEFAULT_CONFIG = { shuttleUnitPrice: 78, shuttlesUsed: 12, courtHourlyRate: 180, hours: 6.5 };
+
+function upstashConfigured() {
+  return !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+}
+
+async function upstashGet(key) {
+  const url = `${process.env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}` },
+  });
+  if (!res.ok) throw new Error(`Upstash GET error ${res.status}`);
+  const data = await res.json();
+  return data.result ? JSON.parse(data.result) : null;
+}
+
+async function upstashSet(key, value) {
+  const url = `${process.env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(JSON.stringify(value)),
+  });
+  if (!res.ok) throw new Error(`Upstash SET error ${res.status}`);
+}
+
+async function loadRoster() {
+  if (upstashConfigured()) {
+    let roster = await upstashGet(ROSTER_KEY);
+    if (!roster) {
+      // ยังไม่เคยบันทึกขึ้น Upstash มาก่อน ใช้ค่าตั้งต้นจากไฟล์ที่แถมมาเป็นฐาน แล้วเซฟขึ้นไปครั้งแรก
+      roster = JSON.parse(fs.readFileSync(ROSTER_FILE, 'utf8'));
+      if (!roster.config) roster.config = DEFAULT_CONFIG;
+      await upstashSet(ROSTER_KEY, roster);
+    }
+    if (!roster.config) roster.config = DEFAULT_CONFIG;
+    return roster;
   }
+  const roster = JSON.parse(fs.readFileSync(ROSTER_FILE, 'utf8'));
+  if (!roster.config) roster.config = DEFAULT_CONFIG;
   return roster;
 }
 
-function saveRoster(roster) {
+async function saveRoster(roster) {
+  if (upstashConfigured()) {
+    await upstashSet(ROSTER_KEY, roster);
+    return;
+  }
   fs.writeFileSync(ROSTER_FILE, JSON.stringify(roster, null, 2), 'utf8');
 }
 
-function defaultState() {
-  const roster = loadRoster();
+function freshState(roster) {
   const players = {};
   roster.players.forEach((name) => {
-    players[name] = { online: false, games: 0, onCourt: false };
+    players[name] = { online: false, games: 0 };
   });
   return {
     date: new Date().toISOString().slice(0, 10),
@@ -33,6 +80,11 @@ function defaultState() {
   };
 }
 
+async function defaultState() {
+  const roster = await loadRoster();
+  return freshState(roster);
+}
+
 // แปลงข้อมูลรูปแบบเก่า (attendance แบบ session 1/2/3) ให้เป็นรูปแบบใหม่ (online + games)
 function migrateState(state, roster) {
   if (state && state.players) return state; // เป็นรูปแบบใหม่อยู่แล้ว
@@ -40,7 +92,7 @@ function migrateState(state, roster) {
   roster.players.forEach((name) => {
     const old = state && state.attendance && state.attendance[name];
     const wasOnline = old && Object.values(old).some(Boolean);
-    players[name] = { online: !!wasOnline, games: 0, onCourt: false };
+    players[name] = { online: !!wasOnline, games: 0 };
   });
   return {
     date: (state && state.date) || new Date().toISOString().slice(0, 10),
@@ -50,27 +102,42 @@ function migrateState(state, roster) {
   };
 }
 
-function loadState() {
-  const roster = loadRoster();
-  if (!fs.existsSync(STATE_FILE)) {
-    const state = defaultState();
-    saveState(state);
-    return state;
+async function loadState() {
+  const roster = await loadRoster();
+  let raw;
+
+  if (upstashConfigured()) {
+    raw = await upstashGet(STATE_KEY);
+    if (!raw) {
+      const state = freshState(roster);
+      await saveState(state);
+      return state;
+    }
+  } else {
+    if (!fs.existsSync(STATE_FILE)) {
+      const state = freshState(roster);
+      await saveState(state);
+      return state;
+    }
+    raw = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
   }
-  const raw = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+
   const migrated = migrateState(raw, roster);
   if (!migrated.config) migrated.config = roster.config;
-  // เติมผู้เล่นใหม่ที่มีใน roster แต่ยังไม่มีใน state (เช่น เพิ่งเพิ่มชื่อ)
   roster.players.forEach((name) => {
-    if (!migrated.players[name]) migrated.players[name] = { online: false, games: 0, onCourt: false };
+    if (!migrated.players[name]) migrated.players[name] = { online: false, games: 0 };
   });
   return migrated;
 }
 
-function saveState(state) {
+async function saveState(state) {
   state.updatedAt = new Date().toISOString();
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
+  if (upstashConfigured()) {
+    await upstashSet(STATE_KEY, state);
+  } else {
+    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
+  }
   return state;
 }
 
-module.exports = { loadRoster, saveRoster, loadState, saveState, defaultState };
+module.exports = { loadRoster, saveRoster, loadState, saveState, defaultState, upstashConfigured };

@@ -1,5 +1,16 @@
 let roster = null;
 let state = null;
+
+// wrapper รอบ fetch ทุกครั้งที่เรียก /api/ - ถ้าเซสชันหมดอายุ (401) ให้พาไปหน้าล็อกอินอัตโนมัติ
+// แทนที่จะโชว์ error ที่งงๆ (เช่น "unauthorized") ทิ้งไว้เฉยๆ
+async function apiFetch(url, options) {
+  const res = await fetch(url, options);
+  if (res.status === 401) {
+    window.location.href = '/login.html?expired=1';
+    throw new Error('เซสชันหมดอายุ กำลังพาไปหน้าล็อกอิน...');
+  }
+  return res;
+}
 let lastParseResult = null;
 let beforeApplySnapshot = null;
 let hasUnsavedChanges = false;
@@ -68,9 +79,20 @@ function applyLoadedData(data) {
 }
 
 async function loadAll() {
-  const res = await fetch('/api/state');
+  const res = await apiFetch('/api/state');
   const data = await res.json();
   applyLoadedData(data);
+
+  const dres = await apiFetch('/api/db-status');
+  const ddata = await dres.json();
+  const dbPill = document.getElementById('dbStatus');
+  if (ddata.persistent) {
+    dbPill.textContent = 'บันทึกถาวร (Upstash)';
+    dbPill.className = 'status-pill status-ok';
+  } else {
+    dbPill.textContent = '⚠️ ยังไม่ถาวร (อาจหายเมื่อแอปพัก)';
+    dbPill.className = 'status-pill status-off';
+  }
 }
 
 function isUserTyping() {
@@ -87,7 +109,7 @@ async function refreshFromServer(silent) {
     const ok = confirm('มีข้อมูลที่ยังไม่ได้บันทึกอยู่ ถ้าโหลดข้อมูลล่าสุดตอนนี้ การแก้ไขที่ยังไม่บันทึกจะหายไป ต้องการโหลดทับหรือไม่?');
     if (!ok) return;
   }
-  const res = await fetch('/api/state');
+  const res = await apiFetch('/api/state');
   const data = await res.json();
   applyLoadedData(data);
   hasUnsavedChanges = false;
@@ -257,8 +279,8 @@ async function downloadReceiptImage() {
 
 document.getElementById('saveBtn').addEventListener('click', async () => {
   roster.config = state.config;
-  await fetch('/api/roster', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(roster) });
-  await fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state }) });
+  await apiFetch('/api/roster', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(roster) });
+  await apiFetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state }) });
 
   const totals = computeTotals(state.config, state.players);
   buildReceipt(totals);
@@ -271,7 +293,7 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   document.getElementById('cfgShuttleCount').value = 0;
   document.getElementById('cfgHours').value = 0;
   roster.config = state.config;
-  await fetch('/api/roster', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(roster) });
+  await apiFetch('/api/roster', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(roster) });
   hasUnsavedChanges = false;
   updateSyncPill();
   render();
@@ -283,7 +305,7 @@ document.getElementById('downloadImgBtn').addEventListener('click', downloadRece
 
 document.getElementById('newRoundBtn').addEventListener('click', async () => {
   if (!confirm('เริ่มรอบใหม่? ระบบจะล้างตาราง (ออนไลน์/เกมส์ทุกคน)')) return;
-  const res = await fetch('/api/state/reset', { method: 'POST' });
+  const res = await apiFetch('/api/state/reset', { method: 'POST' });
   const data = await res.json();
   state = data.state;
   document.getElementById('cfgShuttlePrice').value = state.config.shuttleUnitPrice;
@@ -298,7 +320,7 @@ document.getElementById('newRoundBtn').addEventListener('click', async () => {
 });
 
 document.getElementById('logoutBtn').addEventListener('click', async () => {
-  await fetch('/api/logout', { method: 'POST' });
+  await apiFetch('/api/logout', { method: 'POST' });
   window.location.href = '/login.html';
 });
 
@@ -313,7 +335,7 @@ async function runParse() {
   loading.style.display = 'inline';
 
   try {
-    const res = await fetch('/api/parse', {
+    const res = await apiFetch('/api/parse', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),

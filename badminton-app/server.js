@@ -5,7 +5,7 @@ const multer = require('multer');
 const path = require('path');
 
 const { requireAuth } = require('./lib/auth');
-const { loadRoster, saveRoster, loadState, saveState, defaultState } = require('./lib/store');
+const { loadRoster, saveRoster, loadState, saveState, defaultState, upstashConfigured } = require('./lib/store');
 const { parseAttendance } = require('./lib/parser');
 
 const app = express();
@@ -52,33 +52,64 @@ app.get('/', (req, res) => {
 // ---- ป้องกันทุกอย่างหลังจากนี้ด้วย auth ----
 app.use(requireAuth);
 
-app.get('/api/state', (req, res) => {
-  res.json({ state: loadState(), roster: loadRoster() });
+app.get('/api/state', async (req, res) => {
+  try {
+    const [state, roster] = await Promise.all([loadState(), loadRoster()]);
+    res.json({ state, roster });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post('/api/state', (req, res) => {
-  const state = saveState(req.body.state);
-  res.json({ ok: true, state });
+app.post('/api/state', async (req, res) => {
+  try {
+    const state = await saveState(req.body.state);
+    res.json({ ok: true, state });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post('/api/state/reset', (req, res) => {
-  const state = saveState(defaultState());
-  res.json({ ok: true, state });
+app.post('/api/state/reset', async (req, res) => {
+  try {
+    const fresh = await defaultState();
+    const state = await saveState(fresh);
+    res.json({ ok: true, state });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.get('/api/roster', (req, res) => {
-  res.json(loadRoster());
+app.get('/api/roster', async (req, res) => {
+  try {
+    res.json(await loadRoster());
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post('/api/roster', (req, res) => {
-  saveRoster(req.body);
-  res.json({ ok: true });
+app.post('/api/roster', async (req, res) => {
+  try {
+    await saveRoster(req.body);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/db-status', (req, res) => {
+  res.json({ persistent: upstashConfigured() });
 });
 
 // ---- AI parse: ข้อความ และ/หรือ ภาพ ----
 app.post('/api/parse', upload.single('image'), async (req, res) => {
   try {
-    const roster = loadRoster();
+    const roster = await loadRoster();
     const text = req.body.text || '';
     let imageBase64, imageMediaType;
     if (req.file) {

@@ -17,6 +17,9 @@
     <p id="errorMsg" class="error"></p>
   </div>
   <script>
+    if (new URLSearchParams(window.location.search).get('expired') === '1') {
+      document.getElementById('errorMsg').textContent = 'เซสชันหมดอายุ (เซิร์ฟเวอร์เพิ่งรีสตาร์ท) กรุณาล็อกอินใหม่';
+    }
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const password = document.getElementById('password').value;
