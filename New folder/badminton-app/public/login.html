@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>เข้าสู่ระบบ - ตารางแบดมินตัน</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="login-body">
+  <div class="login-card">
+    <h1>🏸 ตารางแบดมินตัน</h1>
+    <p class="muted">กรอกรหัสผ่านกลุ่มเพื่อเข้าใช้งาน</p>
+    <form id="loginForm">
+      <input type="password" id="password" placeholder="รหัสผ่านกลุ่ม" required autofocus />
+      <button type="submit">เข้าสู่ระบบ</button>
+    </form>
+    <p id="errorMsg" class="error"></p>
+  </div>
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const password = document.getElementById('password').value;
+      const errorMsg = document.getElementById('errorMsg');
+      errorMsg.textContent = '';
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          window.location.href = '/';
+        } else {
+          errorMsg.textContent = data.error || 'เข้าสู่ระบบไม่สำเร็จ';
+        }
+      } catch (err) {
+        errorMsg.textContent = 'เกิดข้อผิดพลาด กรุณาลองใหม่';
+      }
+    });
+  </script>
+</body>
+</html>
