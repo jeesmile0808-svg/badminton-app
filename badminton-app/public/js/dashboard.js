@@ -2,6 +2,24 @@ let roster = null;
 let state = null;
 let lastParseResult = null;
 let beforeApplySnapshot = null;
+let hasUnsavedChanges = false;
+
+function markDirty() {
+  hasUnsavedChanges = true;
+  updateSyncPill();
+}
+
+function updateSyncPill() {
+  const pill = document.getElementById('syncStatus');
+  if (!pill) return;
+  if (hasUnsavedChanges) {
+    pill.textContent = 'มีการแก้ไขที่ยังไม่บันทึก';
+    pill.className = 'status-pill status-off';
+  } else {
+    pill.textContent = 'ข้อมูลล่าสุด';
+    pill.className = 'status-pill status-ok';
+  }
+}
 
 function toast(msg) {
   const el = document.getElementById('toast');
@@ -37,9 +55,7 @@ function computeTotals(config, players) {
   return { totalCourtFee, totalShuttleFee, grandTotal, totalGames, totalMatches, playerCount, perPlayer };
 }
 
-async function loadAll() {
-  const res = await fetch('/api/state');
-  const data = await res.json();
+function applyLoadedData(data) {
   roster = data.roster;
   state = data.state;
   document.getElementById('dateInput').value = state.date;
@@ -47,8 +63,42 @@ async function loadAll() {
   document.getElementById('cfgShuttleCount').value = state.config.shuttlesUsed;
   document.getElementById('cfgCourtRate').value = state.config.courtHourlyRate;
   document.getElementById('cfgHours').value = state.config.hours;
+  updateSyncPill();
   render();
 }
+
+async function loadAll() {
+  const res = await fetch('/api/state');
+  const data = await res.json();
+  applyLoadedData(data);
+}
+
+function isUserTyping() {
+  const el = document.activeElement;
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === 'TEXTAREA' || tag === 'INPUT';
+}
+
+async function refreshFromServer(silent) {
+  if (isUserTyping()) return; // อย่าเพิ่งดึงข้อมูลทับ ถ้ากำลังพิมพ์/แก้อยู่
+  if (hasUnsavedChanges) {
+    if (silent) return; // มีการแก้ที่ยังไม่ได้บันทึกอยู่ อย่าเพิ่งดึงทับเงียบๆ
+    const ok = confirm('มีข้อมูลที่ยังไม่ได้บันทึกอยู่ ถ้าโหลดข้อมูลล่าสุดตอนนี้ การแก้ไขที่ยังไม่บันทึกจะหายไป ต้องการโหลดทับหรือไม่?');
+    if (!ok) return;
+  }
+  const res = await fetch('/api/state');
+  const data = await res.json();
+  applyLoadedData(data);
+  hasUnsavedChanges = false;
+  updateSyncPill();
+  if (!silent) toast('โหลดข้อมูลล่าสุดแล้ว ✅');
+}
+
+document.getElementById('refreshBtn').addEventListener('click', () => refreshFromServer(false));
+
+// ดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์อัตโนมัติทุก 10 วินาที กันกรณีใช้พร้อมกันหลายเครื่อง (คอม/มือถือ) แล้วตัวเลขไม่ตรงกัน
+setInterval(() => refreshFromServer(true), 10000);
 
 
 function render() {
@@ -79,6 +129,7 @@ function render() {
       const name = btn.dataset.name;
       state.players[name].online = !state.players[name].online;
       if (!state.players[name].online) state.players[name].games = 0;
+      markDirty();
       render();
     });
   });
@@ -86,6 +137,7 @@ function render() {
     inp.addEventListener('change', () => {
       const name = inp.dataset.name;
       state.players[name].games = Math.max(0, parseInt(inp.value, 10) || 0);
+      markDirty();
       render();
     });
   });
@@ -97,6 +149,7 @@ function render() {
       roster.players[idx] = newName;
       state.players[newName] = state.players[oldName] || { online: false, games: 0 };
       if (newName !== oldName) delete state.players[oldName];
+      markDirty();
       render();
     });
   });
@@ -106,6 +159,7 @@ function render() {
       const name = roster.players[idx];
       roster.players.splice(idx, 1);
       delete state.players[name];
+      markDirty();
       render();
     });
   });
@@ -131,11 +185,13 @@ document.getElementById('addPlayerBtn').addEventListener('click', () => {
   if (!name) return;
   roster.players.push(name.trim());
   state.players[name.trim()] = { online: false, games: 0 };
+  markDirty();
   render();
 });
 
 document.getElementById('dateInput').addEventListener('change', (e) => {
   state.date = e.target.value;
+  markDirty();
 });
 
 ['cfgShuttlePrice', 'cfgShuttleCount', 'cfgCourtRate', 'cfgHours'].forEach(id => {
@@ -147,6 +203,7 @@ document.getElementById('dateInput').addEventListener('change', (e) => {
       cfgHours: 'hours',
     };
     state.config[map[id]] = parseFloat(e.target.value) || 0;
+    markDirty();
     render();
   });
 });
@@ -193,8 +250,8 @@ async function downloadReceiptImage() {
   const el = document.getElementById('receiptTemplate');
   const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff' });
   const link = document.createElement('a');
-  link.download = `badminton-${state.date}.png`;
-  link.href = canvas.toDataURL('image/png');
+  link.download = `badminton-${state.date}.jpg`;
+  link.href = canvas.toDataURL('image/jpeg', 0.92);
   link.click();
 }
 
@@ -215,6 +272,8 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   document.getElementById('cfgHours').value = 0;
   roster.config = state.config;
   await fetch('/api/roster', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(roster) });
+  hasUnsavedChanges = false;
+  updateSyncPill();
   render();
 
   toast('บันทึกแล้ว ✅ กด "ดาวน์โหลดรูปสรุป" เพื่อเก็บไฟล์ไปเรียกเก็บเงินได้เลย');
@@ -232,6 +291,8 @@ document.getElementById('newRoundBtn').addEventListener('click', async () => {
   document.getElementById('cfgCourtRate').value = state.config.courtHourlyRate;
   document.getElementById('cfgHours').value = state.config.hours;
   document.getElementById('downloadImgBtn').style.display = 'none';
+  hasUnsavedChanges = false;
+  updateSyncPill();
   render();
   toast('เริ่มรอบใหม่แล้ว');
 });
@@ -271,6 +332,7 @@ async function runParse() {
 function applyParseResult(data) {
   // เก็บสถานะก่อนหน้าไว้ ให้กด "ย้อนกลับ" ได้ 1 ครั้งล่าสุด
   beforeApplySnapshot = JSON.parse(JSON.stringify(state.players));
+  markDirty();
 
   const matches = data.matches || [];
   const unmatched = data.unmatched || [];
@@ -316,6 +378,7 @@ document.getElementById('undoBtn').addEventListener('click', () => {
   }
   state.players = beforeApplySnapshot;
   beforeApplySnapshot = null;
+  markDirty();
   render();
   document.getElementById('previewBox').style.display = 'none';
   toast('ย้อนกลับแล้ว');
